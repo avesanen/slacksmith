@@ -3,13 +3,21 @@ package smith
 import (
 	"encoding/json"
 	"errors"
-	"golang.org/x/net/websocket"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
 	"time"
+
+	"golang.org/x/net/websocket"
 )
+
+type Channel struct {
+	Id        string `json:"id"`
+	Name      string `json:"name"`
+	IsChannel bool   `json:"is_channel"`
+	IsGeneral bool   `json:"is_general"`
+}
 
 type Rtm struct {
 	Ok   bool   `json:"ok"`
@@ -18,16 +26,36 @@ type Rtm struct {
 		Id   string `json:"id"`
 		Name string `json:"name"`
 	} `json:"self"`
-	Team     json.RawMessage `json:"team"`
-	Users    json.RawMessage `json:"users"`
-	Channels json.RawMessage `json:"channels"`
-	Groups   json.RawMessage `json:"groups"`
-	Ims      json.RawMessage `json:"ims"`
-	Bots     json.RawMessage `json:"bots"`
-	Error    string          `json:"error,omitempty"`
-	Conn     *websocket.Conn `json:"-"`
-	OutChan  chan string     `json:"-"`
-	InChan   chan MessageMsg `json:"-"`
+	Team struct {
+		Id   string `json:"id"`
+		Name string `json:"name`
+	} `json:"team"`
+	Users    []User            `json:"users"`
+	Channels []Channel         `json:"channels"`
+	Groups   json.RawMessage   `json:"groups"`
+	Ims      json.RawMessage   `json:"ims"`
+	Bots     json.RawMessage   `json:"bots"`
+	Error    string            `json:"error,omitempty"`
+	Conn     *websocket.Conn   `json:"-"`
+	OutChan  chan string       `json:"-"`
+	InChan   chan MessageEvent `json:"-"`
+}
+
+type User struct {
+	Id       string `json:"id"`
+	Name     string `json:"name"`
+	Deleted  bool   `json:"deleted"`
+	RealName string `json:"real_name"`
+	IsAdmin  bool   `json:"is_admin"`
+	IsOwned  bool   `json:"is_owner"`
+	Presence string `json:"presence"`
+	Profile  struct {
+		FirstName          string `json:"first_name"`
+		LastName           string `json:"last_name"`
+		Phone              string `json:"phone"`
+		RealNameNormalized string `json:"real_name_normalized"`
+		Email              string `json:"email"`
+	} `json:"profile"`
 }
 
 func (rtm *Rtm) Reader() {
@@ -51,7 +79,7 @@ func (rtm *Rtm) Reader() {
 			if msg.Type == "pong" {
 				continue
 			} else if msg.Type == "message" {
-				var message MessageMsg
+				var message MessageEvent
 				err = json.Unmarshal(b[:n], &message)
 				if err != nil {
 					log.Println(err.Error())
@@ -145,8 +173,28 @@ func StartRtm(rtmUrl string) (*Rtm, error) {
 	}
 
 	rtm.OutChan = make(chan string)
-	rtm.InChan = make(chan MessageMsg)
+	rtm.InChan = make(chan MessageEvent)
 	rtm.Reader()
 	rtm.Writer()
 	return &rtm, nil
+}
+
+func (rtm *Rtm) GetUser(id string) *User {
+	for _, u := range rtm.Users {
+		if u.Id == id {
+			retU := u
+			return &retU
+		}
+	}
+	return nil
+}
+
+func (rtm *Rtm) GetChannel(id string) *Channel {
+	for _, c := range rtm.Channels {
+		if c.Id == id {
+			retC := c
+			return &retC
+		}
+	}
+	return nil
 }
